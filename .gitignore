@@ -1,0 +1,45 @@
+# Generic C/C++/build
+build/
+out/
+bin/
+obj/
+*.o
+*.a
+*.so
+*.dll
+*.dylib
+*.pdb
+CMakeFiles/
+CMakeCache.txt
+*.cmake
+Makefile
+
+# Android / NDK
+app/build/
+.gradle/
+.local.properties
+local.properties
+*.iml
+*.apk
+*.ap_
+.gradle/
+.idea/
+
+# VSCode / JetBrains
+.vscode/
+.idea/
+
+# Misc
+.DS_Store
+Thumbs.db
+
+# DO NOT COMMIT ROMS OR BIOS
+*.zip
+*.7z
+*.rar
+*.iso
+*.bin
+*.cue
+*.nds
+*.gba
+*.sfc
