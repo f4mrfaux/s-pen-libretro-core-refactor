@@ -16,6 +16,16 @@ Building on RetroArch's S-Pen improvements (android_input.c PR pending), this pr
 | **MelonDS** | 📋 **Planned** | - | ✅ Touchscreen | NDS lower screen |
 | **Beetle PSX** | 🔬 **Prototyping** | - | ⚠️ Research needed | Follow SwanStation pattern |
 
+## 📚 Documentation
+
+Complete documentation is available in the [docs/](docs/) directory:
+
+- **[📋 Compliance Reports](docs/compliance/)** - Official compliance verification and audit reports
+- **[🔧 Implementation Guides](docs/implementation/)** - Technical implementation details and testing procedures  
+- **[👥 User Guides](docs/user-guides/)** - End-user setup and configuration documentation
+
+See [docs/README.md](docs/README.md) for a complete documentation index.
+
 ## How to Try It
 
 ### Quick Start (Reference Implementation)
