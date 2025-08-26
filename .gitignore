@@ -44,15 +44,25 @@ Thumbs.db
 *.gba
 *.sfc
 
-# local core copies (canonical under cores/)
-Genesis-Plus-GX/
-beetle-psx-libretro/
-desmume/
-mame/
-mame2003-plus-libretro/
-mame2016-libretro/
-melonDS/
-picodrive/
-scummvm/
-snes9x/
-swanstation/
+# Build artifacts in cores directories but track source code
+cores/*/build/
+cores/*/out/
+cores/*/obj/
+cores/*/*.o
+cores/*/*.so
+cores/*/*.dll
+cores/*/*.dylib
+cores/*/Makefile
+
+# Only ignore root-level core directories (not cores/ subdirectories)  
+/Genesis-Plus-GX/
+/beetle-psx-libretro/
+/desmume/
+/mame/
+/mame2003-plus-libretro/
+/mame2016-libretro/
+/melonDS/
+/picodrive/
+/scummvm/
+/snes9x/
+/swanstation/
