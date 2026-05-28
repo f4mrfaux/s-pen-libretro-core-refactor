@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>S-Pen → SNES Mouse Servo Simulator</title>
+<style>
+  :root { --bg:#0e1116; --panel:#161b22; --line:#30363d; --fg:#c9d1d9; --accent:#58a6ff;
+          --pen:#58a6ff; --servo:#3fb950; --old:#f85149; --est:#d29922; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  header { padding:10px 16px; border-bottom:1px solid var(--line); display:flex;
+           align-items:baseline; gap:14px; flex-wrap:wrap; }
+  header h1 { font-size:15px; margin:0; font-weight:600; }
+  header .sub { color:#8b949e; font-size:12px; }
+  main { display:grid; grid-template-columns:auto 320px; gap:16px; padding:16px; align-items:start; }
+  .stage { display:flex; flex-direction:column; gap:12px; }
+  canvas { background:#000; border:1px solid var(--line); border-radius:4px; display:block; touch-action:none; }
+  #chart { background:#0a0d12; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:12px; }
+  .panel h2 { font-size:12px; margin:0 0 8px; color:#8b949e; text-transform:uppercase; letter-spacing:.05em; }
+  .ctl { display:grid; grid-template-columns:96px 1fr 52px; gap:8px; align-items:center; margin:6px 0; }
+  .ctl label { color:#8b949e; }
+  .ctl output { text-align:right; color:var(--fg); }
+  input[type=range] { width:100%; accent-color:var(--accent); }
+  .row { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  button { background:#21262d; color:var(--fg); border:1px solid var(--line); border-radius:5px;
+           padding:6px 9px; cursor:pointer; font:inherit; }
+  button:hover { border-color:var(--accent); }
+  button.primary { background:#1f6feb33; border-color:var(--accent); }
+  .metrics { display:grid; grid-template-columns:1fr auto; gap:2px 10px; }
+  .metrics .k { color:#8b949e; } .metrics .v { text-align:right; }
+  .legend { display:flex; gap:14px; flex-wrap:wrap; font-size:12px; }
+  .legend span::before { content:"●"; margin-right:5px; }
+  .lg-pen::before{color:var(--pen)} .lg-servo::before{color:var(--servo)}
+  .lg-old::before{color:var(--old)} .lg-est::before{color:var(--est)}
+  .toggle { display:flex; align-items:center; gap:8px; margin:6px 0; color:#8b949e; }
+  .note { color:#8b949e; font-size:11px; margin-top:6px; }
+  .verdict { margin-top:8px; padding:8px; border-radius:5px; background:#0a0d12; border:1px solid var(--line); white-space:pre-wrap; max-height:180px; overflow:auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>S-Pen → SNES Mouse Servo Simulator</h1>
+  <span class="sub">drag on the screen = pen · release = lift · validates the converge-to-target fix before C++</span>
+</header>
+<main>
+  <div class="stage">
+    <div class="legend panel">
+      <span class="lg-pen">pen / target</span>
+      <span class="lg-servo">servo cursor (game sees)</span>
+      <span class="lg-old">old-code cursor</span>
+      <span class="lg-est">servo estimate</span>
+    </div>
+    <canvas id="screen" width="768" height="672"></canvas>
+    <div class="panel">
+      <h2>Drift over time — |cursor − pen| (game px)</h2>
+      <canvas id="chart" width="768" height="120"></canvas>
+      <div class="note">Green = servo, red = old code. Lower &amp; flat = good. The point: servo stays flat, old code climbs.</div>
+    </div>
+  </div>
+
+  <div class="side">
+    <div class="panel">
+      <h2>Servo parameters</h2>
+      <div class="ctl"><label title="responsiveness: 1.0 = zero-lag tracking; lower = smoother but lags moving pen">Kp</label><input id="Kp" type="range" min="0" max="1" step="0.05" value="1.0"><output id="Kp_o"></output></div>
+      <div class="ctl"><label title="deadzone px">Deadzone</label><input id="D" type="range" min="0" max="10" step="1" value="2"><output id="D_o"></output></div>
+      <div class="ctl"><label title="assumed units→px gain (the core's belief)">S_assumed</label><input id="Sa" type="range" min="0.25" max="3" step="0.05" value="1"><output id="Sa_o"></output></div>
+      <div class="ctl"><label title="real Mario Paint units→px gain (unknown on HW)">S_true</label><input id="St" type="range" min="0.25" max="3" step="0.05" value="1"><output id="St_o"></output></div>
+      <div class="ctl"><label title="max mouse units per frame (HW cap 127)">Clamp</label><input id="Cl" type="range" min="8" max="127" step="1" value="127"><output id="Cl_o"></output></div>
+      <div class="toggle"><input id="hover" type="checkbox" checked><label for="hover">hover tracks (cursor follows non-touching pen)</label></div>
+      <div class="toggle"><input id="showOld" type="checkbox" checked><label for="showOld">show old-code cursor</label></div>
+    </div>
+
+    <div class="panel">
+      <h2>Live metrics</h2>
+      <div class="metrics">
+        <span class="k">pen (target)</span><span class="v" id="m_pen">–</span>
+        <span class="k">servo cursor</span><span class="v" id="m_servo">–</span>
+        <span class="k">old cursor</span><span class="v" id="m_old">–</span>
+        <span class="k">drift servo</span><span class="v" id="m_dservo">–</span>
+        <span class="k">drift old</span><span class="v" id="m_dold">–</span>
+        <span class="k">contact</span><span class="v" id="m_contact">–</span>
+        <span class="k">frame</span><span class="v" id="m_frame">–</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Scripted tests (Playwright-driveable)</h2>
+      <div class="row">
+        <button data-path="centerHold">center hold (drift@rest)</button>
+        <button data-path="corners">corners</button>
+        <button data-path="sweep">fast sweep</button>
+        <button data-path="restToCorner">rest→corner</button>
+        <button data-path="liftTouch">lift/touch ×20</button>
+      </div>
+      <div class="row">
+        <button id="runAll" class="primary">run all + report</button>
+        <button id="reset">reset</button>
+        <button id="pause">pause auto</button>
+      </div>
+      <div class="verdict" id="verdict">window.sim ready. Drag the screen, or click a scripted test.</div>
+    </div>
+  </div>
+</main>
+
+<script src="servo-model.js"></script>
+<script>
+"use strict";
+/* The visual layer. ALL pipeline logic lives in servo-model.js (single source
+   of truth, shared with validate.cjs). This file only renders + wires the DOM. */
+const { W, H, createSim } = SpenModel;
+const SCALE = 3;
+const sim = createSim();          // params + state + scripts live here
+const P = sim.params;
+window.sim = sim;                 // Playwright drives the model directly
+
+// ---- rendering ----
+const screen = document.getElementById('screen'), sx = screen.getContext('2d');
+const chart = document.getElementById('chart'),  cx = chart.getContext('2d');
+let showOld = true;
+const dot=(g,x,y,color,r=5)=>{ g.fillStyle=color; g.beginPath(); g.arc(x*SCALE,y*SCALE,r,0,7); g.fill(); };
+
+function render() {
+  const S = sim.S;
+  sx.clearRect(0,0,screen.width,screen.height);
+  sx.strokeStyle='#1b2027'; sx.lineWidth=1;
+  for(let gx=0;gx<=W;gx+=32){ sx.beginPath(); sx.moveTo(gx*SCALE,0); sx.lineTo(gx*SCALE,H*SCALE); sx.stroke(); }
+  for(let gy=0;gy<=H;gy+=32){ sx.beginPath(); sx.moveTo(0,gy*SCALE); sx.lineTo(W*SCALE,gy*SCALE); sx.stroke(); }
+  drawTrail(S.trail.old, 'rgba(248,81,73,0.35)');
+  drawTrail(S.trail.servo, 'rgba(63,185,80,0.45)');
+  if (showOld) dot(sx,S.trueO.x,S.trueO.y,'#f85149',5);
+  dot(sx,S.est.x,S.est.y,'#d29922',3);
+  dot(sx,S.trueS.x,S.trueS.y,'#3fb950',5);
+  sx.strokeStyle='#58a6ff'; sx.lineWidth=2;
+  sx.beginPath(); sx.arc(S.pen.x*SCALE,S.pen.y*SCALE, S.contact?7:5,0,7); sx.stroke();
+  if(!S.contact){ sx.setLineDash([3,3]); sx.beginPath();
+    sx.arc(S.pen.x*SCALE,S.pen.y*SCALE,11,0,7); sx.stroke(); sx.setLineDash([]); }
+  renderChart(); renderMetrics();
+}
+function drawTrail(arr,color){ if(arr.length<2)return; sx.strokeStyle=color; sx.lineWidth=2;
+  sx.beginPath(); sx.moveTo(arr[0].x*SCALE,arr[0].y*SCALE);
+  for(const p of arr) sx.lineTo(p.x*SCALE,p.y*SCALE); sx.stroke(); }
+function renderChart(){
+  const S = sim.S;
+  cx.clearRect(0,0,chart.width,chart.height);
+  const maxV = Math.max(20, ...S.drift.servo, ...S.drift.old);
+  const y = v => chart.height - (v/maxV)*(chart.height-8) - 4;
+  cx.strokeStyle='#21262d'; cx.beginPath(); cx.moveTo(0,y(0)); cx.lineTo(chart.width,y(0)); cx.stroke();
+  const line=(arr,color)=>{ if(arr.length<2)return; cx.strokeStyle=color; cx.lineWidth=1.5; cx.beginPath();
+    arr.forEach((v,i)=>{ const px=i/239*chart.width; i?cx.lineTo(px,y(v)):cx.moveTo(px,y(v)); }); cx.stroke(); };
+  if(showOld) line(S.drift.old,'#f85149');
+  line(S.drift.servo,'#3fb950');
+  cx.fillStyle='#8b949e'; cx.fillText('max '+maxV.toFixed(0)+'px', 6, 12);
+}
+function renderMetrics(){
+  const st = sim.state(); const f=(p)=>`(${p.x.toFixed(1)}, ${p.y.toFixed(1)})`;
+  set('m_pen',f(st.pen)); set('m_servo',f(st.servo)); set('m_old',f(st.old));
+  set('m_dservo', st.driftServo.toFixed(2)+' px'); set('m_dold', st.driftOld.toFixed(2)+' px');
+  set('m_contact', st.contact?'down':(P.hover?'hover':'up')); set('m_frame', st.frame);
+}
+const set=(id,v)=>document.getElementById(id).textContent=v;
+const setVerdict=(t)=>document.getElementById('verdict').textContent=t;
+
+// ---- interaction (maps screen pixels -> game px and drives the model) ----
+function penFromEvent(e){
+  const r=screen.getBoundingClientRect();
+  // account for the canvas being CSS-scaled (hi-DPI / browser zoom / layout):
+  // map CSS offset -> canvas-internal px -> game px, so the dot sits under the cursor.
+  const toGameX = (screen.width  / r.width ) / SCALE;
+  const toGameY = (screen.height / r.height) / SCALE;
+  return { x: Math.max(0,Math.min(W-1,(e.clientX-r.left)*toGameX)),
+           y: Math.max(0,Math.min(H-1,(e.clientY-r.top )*toGameY)) };
+}
+screen.addEventListener('pointerdown',e=>{ const p=penFromEvent(e); sim.penDown(p.x,p.y); screen.setPointerCapture(e.pointerId); });
+screen.addEventListener('pointermove',e=>{ const p=penFromEvent(e); sim.penMove(p.x,p.y); });
+screen.addEventListener('pointerup',  ()=>sim.penUp());
+
+// ---- controls bound to sim.params ----
+function bindRange(id,key,fmt){ const el=document.getElementById(id),out=document.getElementById(id+'_o');
+  const upd=()=>{ P[key]=parseFloat(el.value); out.textContent=fmt(P[key]); };
+  el.addEventListener('input',upd); upd(); }
+bindRange('Kp','Kp',v=>v.toFixed(2)); bindRange('D','D',v=>v+'px');
+bindRange('Sa','Sa',v=>v.toFixed(2)); bindRange('St','St',v=>v.toFixed(2)); bindRange('Cl','Cl',v=>v);
+document.getElementById('hover').addEventListener('change',e=>P.hover=e.target.checked);
+document.getElementById('showOld').addEventListener('change',e=>showOld=e.target.checked);
+document.getElementById('reset').addEventListener('click',()=>{ sim.reset(); setVerdict('reset.'); });
+let auto=true; const pauseBtn=document.getElementById('pause');
+pauseBtn.addEventListener('click',()=>{ auto=!auto; pauseBtn.textContent=auto?'pause auto':'resume auto'; });
+
+document.querySelectorAll('button[data-path]').forEach(b=>b.addEventListener('click',()=>{
+  const r=sim.runScript(b.dataset.path); setVerdict(b.dataset.path+': '+JSON.stringify(r,null,1)); }));
+document.getElementById('runAll').addEventListener('click',()=>setVerdict(JSON.stringify(sim.runAll(),null,1)));
+
+// ---- loop ----
+(function frameLoop(){ if(auto) sim.tick(1); render(); requestAnimationFrame(frameLoop); })();
+</script>
+</body>
+</html>

@@ -1,19 +1,19 @@
 [submodule "cores/Genesis-Plus-GX"]
 	path = cores/Genesis-Plus-GX
-	url = git@github.com:f4mrfaux/Genesis-Plus-GX.git
-	branch = stylus/spen-support
+	url = https://github.com/libretro/Genesis-Plus-GX.git
+	branch = stylus/hover-drag
 [submodule "cores/beetle-psx-libretro"]
 	path = cores/beetle-psx-libretro
-	url = git@github.com:f4mrfaux/beetle-psx-libretro.git
-	branch = stylus/spen-support
+	url = https://github.com/libretro/beetle-psx-libretro.git
+	branch = stylus/hover-drag
 [submodule "cores/desmume"]
 	path = cores/desmume
-	url = git@github.com:f4mrfaux/desmume.git
-	branch = stylus/spen-support
+	url = https://github.com/libretro/desmume.git
+	branch = stylus/hover-drag
 [submodule "cores/mame2003-plus-libretro"]
 	path = cores/mame2003-plus-libretro
-	url = git@github.com:f4mrfaux/mame2003-plus-libretro.git
-	branch = stylus/spen-support
+	url = https://github.com/libretro/mame2003-plus-libretro.git
+	branch = stylus/hover-drag
 [submodule "cores/snes9x"]
 	path = cores/snes9x
 	url = git@github.com:f4mrfaux/snes9x.git
@@ -26,3 +26,19 @@
 	path = cores/swanstation
 	url = git@github.com:f4mrfaux/swanstation.git
 	branch = stylus/spen-support
+[submodule "cores/mame"]
+	path = cores/mame
+	url = https://github.com/libretro/mame.git
+	branch = stylus/hover-drag
+[submodule "cores/melonDS"]
+	path = cores/melonDS
+	url = git@github.com:f4mrfaux/melonDS.git
+	branch = feature/s-pen-support
+[submodule "cores/picodrive"]
+	path = cores/picodrive
+	url = https://github.com/libretro/picodrive.git
+	branch = master
+[submodule "cores/scummvm"]
+	path = cores/scummvm
+	url = https://github.com/libretro/scummvm.git
+	branch = master

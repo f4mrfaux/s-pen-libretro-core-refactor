@@ -8,9 +8,9 @@ Building on RetroArch's S-Pen improvements (android_input.c PR pending), this pr
 
 | Core | Status | Mouse Support | Lightgun Support | Notes |
 |------|--------|---------------|------------------|-------|
-| **SNES9x** | ✅ **Tested** | ✅ Absolute mode | ✅ Pointer mode | Mario Paint, Super Scope 6 |
-| **MAME 2016** | ✅ **Tested** | ✅ Absolute mode | ✅ Lightgun mode | Area 51, arcade games |
-| **SwanStation** | ✅ **Tested** | - | ✅ GunCon mode | Point Blank, PSX lightgun |
+| **SNES9x** | 🚧 **In progress** | ✅ Absolute mode | ✅ Pointer mode | Mario Paint, Super Scope 6 |
+| **MAME 2016** | 🚧 **In progress** | ✅ Absolute mode | ✅ Lightgun mode | Area 51, arcade games |
+| **SwanStation** | 🚧 **In progress** | - | ✅ GunCon mode | Point Blank, PSX lightgun |
 | **Genesis Plus GX** | ✅ **Available** | ✅ Built-in | ✅ Built-in | Already excellent |
 | **DeSmuME** | 📋 **Planned** | - | ✅ Touchscreen | NDS lower screen |
 | **MelonDS** | 📋 **Planned** | - | ✅ Touchscreen | NDS lower screen |
@@ -68,7 +68,6 @@ Each core provides comprehensive S-Pen support through core options:
 5. Set **S-Pen Hover Behavior** - hover tracking preferences
 6. **Quick Menu → Overrides → Save Game Overrides** (remembers per-game!)
 
-**Complete visual guide:** See `UI_CONFIGURATION_GUIDE.md`
 
 ## Reference Implementation
 
@@ -182,7 +181,7 @@ Comprehensive test cases available in `spen_testing_plan.md` covering:
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for:
+Contributions welcome! Key areas:
 - Build toolchain setup
 - Code style guidelines  
 - Testing procedures with RetroArch Android
