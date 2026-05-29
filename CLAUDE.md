@@ -17,22 +17,39 @@ of the RetroArch `[SNES9X S-Pen VERBOSE]` log (its `Raw:` field = physical pixel
 = RetroArch normalized `[-32767,+32767]` — the ±30000 values are the *correct* edge mapping).
 The current core transform (`libretro.cpp:2143`) is clean `double` math. No overflow bug.
 
-### The fix: converge-to-target servo (designed + sim-validated; NOT yet in the core)
+### Status: SOLVED — RAM-feedback + per-game profile table (Mario Paint & Clock Tower locked on hardware)
 
-Each frame, steer an estimated cursor toward the absolute pen target with a delta clamped to the
-SNES ±127/poll limit. `Kp=1.0` → zero-lag tracking; a tunable `gain` (S_assumed) calibrates
-mouse-units→pixels on hardware. Re-referencing the absolute target every frame makes drift
-impossible.
+The cursor now tracks the pen pixel-accurately, including clicks (paint/aim land where the pen is).
+Two layers got us here:
 
-- **Spec:** `docs/superpowers/specs/2026-05-28-snes9x-spen-servo-design.md`
-- **Plan:** `docs/superpowers/plans/2026-05-28-snes9x-spen-servo.md` (bite-sized TDD tasks)
-- **Validated simulator:** `tools/spen-sim/` — `servo-model.js` (shared model),
-  `index.html` (visual, Playwright-driveable), `validate.cjs` (headless asserts;
-  run `node tools/spen-sim/validate.cjs` → ALL PASS), `screenshots/`.
+1. **HOVER fix (core-side):** detect the pen by a CHANGE in pointer coords. RetroArch delivers hover
+   as count-INDEPENDENT `POINTER_X/Y` with `PRESSED=false`; the core was gating on `count>0` and
+   ignoring it. Also fixed the idle-creep + per-tap re-home. **DO NOT re-fix RetroArch hover — it's
+   done** (branch `spen-hover-fix`, deployed). See memory `retroarch-hover-already-implemented`.
+2. **RAM-feedback cursor (the breakthrough):** the SNES Mouse is RELATIVE and the game's delta→pixel
+   gain is nonlinear, so a pure dead-reckoning servo always drifts (confirmed; even Nintendo's
+   official emu is imprecise). Instead, for known games the core READS the game's real cursor from
+   WRAM and steers it toward the pen (closed-loop, gain-independent → no drift/offset, survives
+   lifts/edges). Unprofiled games fall back to the dead-reckoning servo (`spen_servo.h`); lightgun
+   games are untouched (already absolute).
 
-**Sim results (Kp=1.0, gain matched):** drift 0 at rest & over 2200 frames, 1-frame convergence,
-0px corners, **0px tracking lag while dragging** (vs 32px at Kp=0.6 — the catch that set Kp=1.0).
-Gain mismatch → bounded *static* offset (not drift), calibratable via the gain option.
+**Per-game profile table** `SPEN_MOUSE_PROFILES[]` (top of `libretro.cpp`) — `{ title-prefix,
+cursor_x_addr, cursor_y_addr }`, keyed on `Memory.ROMName`; `$7Exxxx == Memory.RAM[xxxx]`:
+- `MARIO PAINT` $0226/$0227 — VERIFIED locked.
+- `CLOCK TOWER` $017E/$017F ("CLOCK TOWER SFX" Deluxe) — VERIFIED locked.
+- `LEMMINGS`/$0071/0073, `LEMMINGS 2`/$0C34/0C35, `SIMCITY`/$01EB/01ED, `DUNGEON MASTER`/$0034/0036 —
+  seeded (sourced; title prefixes unconfirmed). See memory `snes-mouse-cursor-addresses`.
+
+**Auto-finder (DEBUG_SPEN_VERBOSE builds only):** when a game has no profile, the core correlates
+each WRAM byte (`$0000-1FFF`) against the pen target over a pen sweep and logs
+`[SPEN-FINDER] Xcand:$XXXX(r=..) Ycand:$YYYY(r=..)`. To add a game: load an (owned) ROM, sweep the
+pen ~5s, take the `r≈1.00` candidate → add one line to the table → rebuild. This is how Clock Tower
+was found. Do NOT source ROMs — user dumps their own carts.
+
+**Inputs (per spec):** hover/contact = move cursor; tap (tip) = left click; barrel = right click.
+Tunable options `snes9x_spen_servo_gain`/`_responsiveness`/`_deadzone` apply to the dead-reckoning
+fallback (the smoothing option was removed). Servo unit + native test + sim:
+`spen_servo.h`, `spen_servo_test.cpp`, `tools/spen-sim/` (`node tools/spen-sim/validate.cjs` → ALL PASS).
 
 ### Architecture: TWO layers (do not forget the RetroArch half)
 
@@ -46,23 +63,27 @@ Gain mismatch → bounded *static* offset (not drift), calibratable via the gain
 - **`cores/*`** (this repo's submodules): consumers of that contract. The SNES9x fix is
   core-side only — RetroArch already provides what we need.
 
-### Current git state (uncommitted — for tomorrow's review)
-- Main repo `main`: today's new files are UNCOMMITTED working-tree changes — the spec, the plan,
-  `tools/spen-sim/`, and this CLAUDE.md rewrite. Nothing committed yet (no-auto-commit rule).
-- `cores/snes9x` branch `stylus/spen-support`: **diverged from origin (17 ahead / 9 behind),
-  unpushed**, with uncommitted `libretro.cpp` debug-logging (+15 lines). Version string
-  `1.62.3-spen-v8` lives only in `snes9x_libretro.info`, not in source.
+### Build + deploy (ARM64 ONLY — see memory `arm-build-only`)
+- Rebuild the debug core from `cores/snes9x/libretro`:
+  `ndk-build NDK_PROJECT_PATH=$PWD APP_BUILD_SCRIPT=$PWD/jni/Android.mk APP_ABI=arm64-v8a
+  APP_PLATFORM=android-21 APP_CFLAGS=-DDEBUG_SPEN_VERBOSE` (absolute paths avoid the `jni/jni/..`
+  source-path doubling). Output: `libs/arm64-v8a/libretro.so`. NDK r25c at `/home/bob/android-ndk-r25c`.
+- **RetroArch loads the core from its PRIVATE dir**
+  `/data/user/0/com.retroarch.aarch64/cores/snes9x_libretro.so` — NOT `/storage/emulated/0/RetroArch/cores/`
+  (pushing there does nothing). The app IS debuggable, so deploy via run-as: push the `.so` to
+  `/storage/emulated/0/Download/`, then `adb shell 'run-as com.retroarch.aarch64 cp
+  /storage/emulated/0/Download/X.so cores/snes9x_libretro.so'`. Delete stale cores.
+- Confirm the new core is actually live via `[SPEN-DEBUG-1]`/`[SPEN-SERVO]` lines in the RetroArch
+  FILE log (`/storage/emulated/0/RetroArch/logs/*.log` — NOT adb logcat). Pull the newest log and
+  grep `SPEN-SERVO` (shows raw/target/est/step/acc). adb is flaky — re-run `adb devices` if it drops.
 
-### Next steps (review TOMORROW, then execute the plan)
-1. Review spec + plan together.
-2. Decide execution mode (subagent-driven vs inline) and the commit policy.
-3. Phase 0: docs de-slop (this file done; `.gitmodules` add missing entries incl. `cores/mame`
-   which currently makes `git submodule status` fatal; README dead links).
-4. Phase 1–2: C++ servo (`spen_servo.h` + native test mirroring `validate.cjs`) → integrate into
-   `libretro.cpp`, add `servo_gain`/`responsiveness`/`deadzone` options, drop smoothing option,
-   fix hover-gating leak, patch legacy-touch branch.
-5. Phase 3: ARM64 build (NDK r25c) → bump `-spen-v9`.
-6. Phase 4: Mario Paint hardware test + gain calibration on the Galaxy Z Fold 5.
+### Git state
+- Main `main`: spec, plan, `tools/spen-sim/`, `.gitmodules`, README, CLAUDE.md committed (`28f424c`).
+- `cores/snes9x` (`stylus/spen-support`): servo + options + initial gating committed (`e77d6e9e`).
+  **Hardware-driven fixes are UNCOMMITTED in the working tree:** hover coord-change detection,
+  removal of the per-lift re-home resets, and the `[SPEN-SERVO]` trace. The DEVICE runs a DEBUG build
+  (`-DDEBUG_SPEN_VERBOSE`) of this working tree. Diverged from origin; not pushed. Version
+  `1.62.3-spen-v9` (`snes9x_libretro.info`). A machine restart will NOT lose these working-tree edits.
 
 ### Sibling cores (already absolute, working — out of scope for the drift fix)
 Genesis-Plus-GX (lightgun/Pico pen), melonDS (DS touchscreen), SwanStation (GunCon + PS-mouse via
@@ -79,8 +100,17 @@ so the point lands under the pen. SwanStation's PS-mouse is the absolute→relat
 
 ### Core options pattern
 `{core}_spen_coordinate_mode` (absolute|relative), `{core}_spen_input_mode` (auto|mouse|lightgun).
-New (planned) snes9x: `snes9x_spen_servo_gain`, `snes9x_spen_servo_responsiveness`,
-`snes9x_spen_servo_deadzone`; removing `snes9x_spen_advanced_filtering` (servo subsumes smoothing).
+snes9x now ships `snes9x_spen_servo_gain`, `snes9x_spen_servo_responsiveness`,
+`snes9x_spen_servo_deadzone` (LIVE in the deployed core); `snes9x_spen_advanced_filtering` was
+removed (servo subsumes smoothing). On hardware, gain=2.0 undershot badly — keep gain ≤ 1.0.
+
+### Backlog (future ideas)
+- **Auto-hide on-screen overlay when S-Pen is active** (RetroArch-fork feature, NOT the core):
+  the touch overlay's input zones conflict with S-Pen taps. When a stylus is detected, temporarily
+  hide the overlay; restore it after ~2s of no stylus events so touch menu access returns.
+  Implement in the RetroArch fork (`input/drivers/android_input.c` stylus detection already exists;
+  drive overlay visibility off a stylus-activity timestamp + timeout). Requested 2026-05-28 —
+  manually toggling the overlay is a friction point and losing it strands menu access.
 
 ### User goal
 Sandbox development → hardware testing → upstream PR contributions to libretro cores.

@@ -1,7 +1,7 @@
 # SNES9x S-Pen Cursor Servo — Design Spec
 
 - **Date:** 2026-05-28
-- **Status:** Approved design (servo strategy), sim-validated. Pending: written-spec review → implementation plan.
+- **Status:** IMPLEMENTED + deployed to hardware (2026-05-28). Servo in the core, ARM64-built, running on the Galaxy Z Fold 5 / Mario Paint. Sim-validated and hardware-confirmed: cursor tracks the pen during continuous hover/contact; HOVER fixed core-side; tap=left, barrel=right. **Two issues remain** (see memory `project_spen-hardware-state` + §"Hardware findings" below): (1) constant down-left offset = wrong `est` home position vs Mario Paint's actual cursor start; (2) lift + far-side desync = the servo dead-reckons the game cursor (can't read SNES RAM), so big blind moves break the absolute lock. Note: hover is delivered correctly by RetroArch already (count-independent POINTER_X/Y) — do NOT re-fix it RetroArch-side.
 - **Author:** f4mrfaux + Claude
 - **Scope:** Fix S-Pen cursor **drift** in the SNES9x libretro core (Mario Paint as test bed). Core-side only — no RetroArch changes required.
 

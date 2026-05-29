@@ -1,5 +1,7 @@
 # SNES9x S-Pen Cursor Servo — Implementation Plan
 
+> **STATUS (2026-05-28): largely EXECUTED + deployed to hardware.** Phase 1 (servo unit + native test) done; Phase 2 (servo integration, options, gating, legacy-touch) done & committed (`cores/snes9x` `e77d6e9e`); Phase 3 (ARM64 build) done; Phase 0 docs partly done. Phase 4 (hardware test) IN PROGRESS on the Galaxy Z Fold 5 / Mario Paint. Beyond this plan, hardware testing drove extra fixes (now UNCOMMITTED in the working tree): **hover via pointer-coord-change detection** (the count-based gate ignored hover), removal of per-lift re-home resets, and a `[SPEN-SERVO]` debug trace. Remaining open problems: (1) constant down-left cursor offset (est home vs Mario Paint's real cursor start), (2) lift+far-side desync (dead-reckoning limit; try edge re-homing). See `CLAUDE.md` and memory `project_spen-hardware-state` for the live state.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the SNES9x S-Pen "absolute" mouse path (which writes an absolute coordinate into a relative-delta device → cursor drift) with a converge-to-target servo so the cursor tracks under the pen with zero drift, and refresh the stale project docs.
